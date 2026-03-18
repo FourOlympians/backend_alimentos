@@ -32,7 +32,8 @@ __all__ = ["app", "init_webapp"]
 
 app = Flask(__name__)
 
-
+from flaskskeleton.alimentos_api import api_bp
+app.register_blueprint(api_bp)
 @app.cli.command()
 def version() -> None:
     """Print the current version of flask-skeleton.
