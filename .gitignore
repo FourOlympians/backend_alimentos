@@ -66,3 +66,5 @@ docs/_build/
 
 # Docker
 .flask-skeleton-container-id
+
+*.env
