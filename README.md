@@ -1,96 +1,159 @@
-# Flask Skeleton
+# FoodLight · API Laravel 11 + Supabase
 
-A "hello world" style Flask web server application that applies good practices
-learned over the years. This application is meant to be copied and pasted,
-refactored, and specialized to suit your needs.
+Backend REST para la app Vue FoodLight. Conecta directamente a la base de datos
+PostgreSQL de Supabase y valida los tokens JWT que emite Supabase Auth.
 
-- [APScheduler](https://apscheduler.readthedocs.io/en/latest/index.html)
-- [Authlib](https://docs.authlib.org/en/latest/index.html)
-- [Flask-Admin](https://github.com/pallets-eco/flask-admin)
-- [Flask-Bootstrap](http://pythonhosted.org/Flask-Bootstrap/)
-- [Flask-SQLAlchemy](https://pythonhosted.org/Flask-SQLAlchemy/)
-- [Flask-Security](https://pythonhosted.org/Flask-Security/)
-- [Flask](http://flask.pocoo.org/)
-- [Gunicorn](http://gunicorn.org/)
+---
 
-Out of the box, it comes with a simple OAuth2 integration against Google
-Calendar API.  If you want to use this integration, you'll need to follow the
-directions [here](https://developers.google.com/calendar/auth) to setup an
-application on your Google API Console. Export the client/secret to
-`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, respectively. If you don't want this
-integration, deleting this code should be straight forward.
+## Estructura de archivos
 
-# Iniciar Servidor de Desarrollo
+```
+foodlight-api/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   │   ├── AlimentoController.php   ← alimentos + semáforo
+│   │   │   ├── CondicionController.php  ← catálogo de condiciones
+│   │   │   ├── PerfilController.php     ← perfil del usuario (protegido)
+│   │   │   └── RecetaController.php     ← recetas
+│   │   └── Middleware/
+│   │       └── VerifySupabaseJwt.php    ← valida Bearer token de Supabase
+│   ├── Models/
+│   │   ├── Alimento.php
+│   │   ├── GrupoAlimento.php
+│   │   └── Models.php                  ← Receta, RecetaIngrediente,
+│   │                                      CondicionMedica, ClasificacionCache,
+│   │                                      ReglaSemaforo
+│   └── Services/
+│       ├── SemaforoService.php          ← lógica de clasificación verde/amarillo/rojo
+│       └── SupabaseService.php          ← cliente HTTP para la API REST de Supabase
+├── config/
+│   ├── cors.php
+│   └── supabase.php
+├── database/
+│   ├── migrations/
+│   │   └── 2024_01_01_create_foodlight_tables.php
+│   └── seeders/
+│       └── DatabaseSeeder.php           ← condiciones + reglas semáforo
+├── routes/
+│   └── api.php
+├── bootstrap/
+│   └── app.php
+├── frontend-composable/
+│   └── useApi.js                        ← copia esto a tu proyecto Vue
+└── .env.example
+```
 
-* Tener uv instalado
+---
+
+## Instalación
 
 ```bash
-uv sync 
+# 1. Instalar dependencias
+composer install
+
+# 2. Copiar y rellenar variables de entorno
+cp .env.example .env
+# → edita DB_PASSWORD, SUPABASE_*, FRONTEND_URL
+
+# 3. Generar clave de la app
+php artisan key:generate
+
+# 4. Correr migraciones (conecta directo a Supabase)
+php artisan migrate
+
+# 5. Sembrar condiciones y reglas del semáforo
+php artisan db:seed
+
+# 6. Iniciar servidor
+php artisan serve
 ```
 
-* Activar entorno virtual powershell
+---
 
-```bash
-./venv/Scripts/Activate.ps1
-```
+## Endpoints
 
-* Activar entorno virtual bash
+| Método | Ruta                        | Auth | Descripción                                   |
+|--------|-----------------------------|------|-----------------------------------------------|
+| GET    | /api/health                 | –    | Estado de la API                              |
+| GET    | /api/grupos                 | –    | Grupos de alimentos                           |
+| GET    | /api/condiciones            | –    | Catálogo de condiciones médicas               |
+| GET    | /api/alimentos              | –    | Lista paginada (`q`, `grupo_id`, `per_page`)  |
+| GET    | /api/alimentos/{id}         | –    | Detalle de un alimento                        |
+| GET    | /api/alimentos/semaforo     | –    | Lista con color (`condicion_ids`, `color`)    |
+| GET    | /api/recetas                | –    | Lista paginada de recetas                     |
+| GET    | /api/recetas/{id}           | –    | Detalle con ingredientes y condiciones        |
+| GET    | /api/recetas/para-mi        | –    | Recetas aptas para condiciones dadas          |
+| GET    | /api/perfil                 | JWT  | Perfil + condiciones del usuario              |
+| PUT    | /api/perfil                 | JWT  | Actualizar datos del perfil                   |
+| POST   | /api/perfil/condiciones     | JWT  | Sincronizar condiciones activas               |
 
-```bash
-./venv/Scripts/activate
-```
-
-* Ejecutar servidor
-
-```bash
-flask --app "flaskskeleton:init_webapp('./config/dev.config')" run
-```
-
-# Documentation
-
-- [Developing](./docs/developing.md)
-- [Bootstrapping Alembic](./docs/bootstrapping-alembic.md)
-- [Configuration](./docs/configuration.md)
-
-# Quickstart
-
-Use Docker to build and run the webapp locally.
-
-```bash
-docker build -t sholsapp/flask-skeleton:0.1 .
-docker run --publish 8080:8080 --detach sholsapp/flask-skeleton:0.1
-# You'll need to log in to the container and initialize the database using
-# alembic unless you're using a remote database.
-# $ alembic upgrade head
-curl http://0.0.0.0:8080/
-```
-
-# Packaging
-
-Use Docker to build a deployable .deb package, and create a container to copy
-the .deb to the local host's current directory.
+### Ejemplo: semáforo
 
 ```
-docker build -f Dockerfile --target builder -t sholsapp/flask-skeleton-builder .
-docker create --cidfile .tmp-docker-container-id sholsapp/flask-skeleton-builder
-xargs -I {} docker cp -a "{}:/build/flask-skeleton_0.1-1_amd64.deb" . < .tmp-docker-container-id
-xargs -I {} docker rm -f "{}" < .tmp-docker-container-id
-rm .tmp-docker-container-id
+GET /api/alimentos/semaforo?condicion_ids=1,2&q=pan&color=rojo
 ```
 
-Then .deb has the application code, dependencies, and configuration wrapped up.
-Installing it will put the application in /opt/flask-skeleton and install an
-init.d script so you can start the application with `service flask-skeleton
-start`.
+Respuesta:
+```json
+{
+  "data": [
+    { "id": 42, "nombre": "Pan blanco", "color": "rojo", "grupo_nombre": "Cereales", ... }
+  ],
+  "totals": { "verde": 120, "amarillo": 45, "rojo": 12 }
+}
+```
 
-Deploy the .deb as you see fit.
+---
 
-# Related Works
+## Conexión desde Vue
 
-  1. [sean-/flask-skeleton](https://github.com/sean-/flask-skeleton)
-  2. [graup/flask-restless-security](https://github.com/graup/flask-restless-security)
-  3. [imwilsonxu/fbone](https://github.com/imwilsonxu/fbone)
-  4. [xen/flask-project-template](https://github.com/xen/flask-project-template)
-  5. [jelmerdejong/flask-app-blueprint](https://github.com/jelmerdejong/flask-app-blueprint)
-  6. [sdetautomation/flask-api](https://github.com/sdetautomation/flask-api)
-  7. [cburmeister/flask-bones](https://github.com/cburmeister/flask-bones)
+Copia `frontend-composable/useApi.js` a tu proyecto Vue y agrega al `.env`:
+
+```
+VITE_API_URL=http://localhost:8000/api
+VITE_SUPABASE_URL=https://pdqtptokxanlmllmmlid.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_...
+```
+
+Uso en un componente:
+
+```vue
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useApi } from '@/composables/useApi'
+
+const { getSemaforo, loading } = useApi()
+const alimentos = ref([])
+
+onMounted(async () => {
+  const res = await getSemaforo({ condicion_ids: '1,2' })
+  alimentos.value = res.data
+})
+</script>
+```
+
+---
+
+## Autenticación
+
+El middleware `supabase.jwt` valida el token Bearer emitido por Supabase Auth usando
+`SUPABASE_JWT_SECRET`. El frontend envía el token así:
+
+```
+Authorization: Bearer <supabase_access_token>
+```
+
+El composable `useApi.js` lo hace automáticamente leyendo la sesión activa de Supabase.
+
+---
+
+## Variables de entorno clave
+
+| Variable                | Dónde encontrarla                          |
+|-------------------------|--------------------------------------------|
+| `DB_HOST`               | Supabase → Settings → Database → Host      |
+| `DB_PASSWORD`           | Supabase → Settings → Database → Password  |
+| `SUPABASE_ANON_KEY`     | Supabase → Settings → API → anon key       |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role |
+| `SUPABASE_JWT_SECRET`   | Supabase → Settings → API → JWT Secret     |
