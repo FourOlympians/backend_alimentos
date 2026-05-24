@@ -27,11 +27,21 @@ class SemaforoService
             return $this->clasificacionGeneral($alimento);
         }
 
+        $claves = \App\Models\CondicionMedica::whereIn('id', $condicionIds)->pluck('clave')->toArray();
+
+        $resultado = 'verde';
+
+        // 1. Regla estricta para Celiaquía (gluten es totalmente prohibitivo)
+        if (in_array('celiaquia', $claves)) {
+            if ($alimento->contiene_gluten) {
+                $resultado = 'rojo';
+            }
+        }
+
+        // 2. Cargar y aplicar las reglas dinámicas de la base de datos (Diabetes, Hipertensión)
         $reglas = ReglaSemaforo::whereIn('condicion_id', $condicionIds)
             ->orderBy('prioridad', 'desc')
             ->get();
-
-        $resultado = 'verde';
 
         foreach ($reglas as $regla) {
             $valor = $alimento->{$regla->campo_nutriente} ?? null;
@@ -52,18 +62,20 @@ class SemaforoService
     }
 
     /**
-     * Clasifica sin condiciones usando heurísticas nutricionales básicas.
+     * Clasifica sin condiciones usando heurísticas nutricionales básicas basadas en el SMAE.
      */
     protected function clasificacionGeneral(Alimento $alimento): string
     {
-        $fibra  = (float) ($alimento->fibra_g       ?? 0);
-        $kcal   = (float) ($alimento->energia_kcal  ?? 0);
-        $sodio  = (float) ($alimento->sodio_mg      ?? 0);
-        $azucar = (float) ($alimento->azucar_g      ?? 0);
+        $sodio     = (float) ($alimento->sodio_mg       ?? 0);
+        $azucar    = (float) ($alimento->azucar_g       ?? 0);
+        $satGrasas = (float) ($alimento->ag_saturados_g ?? 0);
 
-        if ($sodio > 400 || $azucar > 20) return 'rojo';
-        if ($kcal  > 300 || $sodio > 150) return 'amarillo';
-        if ($fibra  > 3)                  return 'verde';
+        if ($sodio > 350 || $azucar > 10 || $satGrasas > 4) {
+            return 'rojo';
+        }
+        if ($sodio > 120 || $azucar > 5 || $satGrasas > 1.5) {
+            return 'amarillo';
+        }
 
         return 'verde';
     }

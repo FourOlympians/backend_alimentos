@@ -62,19 +62,21 @@ return new class extends Migration
         });
 
         // Trigger para nombre_normalizado (PostgreSQL)
-        \DB::unprepared("
-            CREATE OR REPLACE FUNCTION set_nombre_normalizado()
-            RETURNS TRIGGER AS \$\$
-            BEGIN
-                NEW.nombre_normalizado := lower(trim(NEW.nombre));
-                RETURN NEW;
-            END;
-            \$\$ LANGUAGE plpgsql;
+        if (\DB::getDriverName() === 'pgsql') {
+            \DB::unprepared("
+                CREATE OR REPLACE FUNCTION set_nombre_normalizado()
+                RETURNS TRIGGER AS \$\$
+                BEGIN
+                    NEW.nombre_normalizado := lower(trim(NEW.nombre));
+                    RETURN NEW;
+                END;
+                \$\$ LANGUAGE plpgsql;
 
-            CREATE TRIGGER trg_nombre_normalizado
-            BEFORE INSERT OR UPDATE ON alimentos
-            FOR EACH ROW EXECUTE FUNCTION set_nombre_normalizado();
-        ");
+                CREATE TRIGGER trg_nombre_normalizado
+                BEFORE INSERT OR UPDATE ON alimentos
+                FOR EACH ROW EXECUTE FUNCTION set_nombre_normalizado();
+            ");
+        }
 
         // 3 ── condiciones_medicas ──────────────────────────────────────────
         Schema::create('condiciones_medicas', function (Blueprint $t) {
@@ -205,7 +207,9 @@ return new class extends Migration
         Schema::dropIfExists('alimentos');
         Schema::dropIfExists('grupos_alimentos');
 
-        \DB::unprepared('DROP TRIGGER IF EXISTS trg_nombre_normalizado ON alimentos');
-        \DB::unprepared('DROP FUNCTION IF EXISTS set_nombre_normalizado()');
+        if (\DB::getDriverName() === 'pgsql') {
+            \DB::unprepared('DROP TRIGGER IF EXISTS trg_nombre_normalizado ON alimentos');
+            \DB::unprepared('DROP FUNCTION IF EXISTS set_nombre_normalizado()');
+        }
     }
 };
